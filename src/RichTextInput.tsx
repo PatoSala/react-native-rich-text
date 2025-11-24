@@ -1,5 +1,5 @@
 import { useState, useImperativeHandle, useRef } from "react";
-import { TextInput, Text, StyleSheet, View } from "react-native";
+import { TextInput, Text, StyleSheet, View, Linking } from "react-native";
 
 const exampleText = "Hello *bold* *italic* lineThrough *underline* world!";
 
@@ -10,22 +10,123 @@ const StylesMap = {
     underline: (children) => <Text style={styles.underline}>{children}</Text>,
 }
 
-function parseAsterisks(str) {
-  const parts = str.split('*'); // ["This is a ", "test string", ""]
-  
-  return parts.map((part, i) => {
-    // Even indexes = normal text
-    if (i % 2 === 0) {
-      return <Text key={`text-${i}`}>{part}</Text>;
+function tokenize(str) {
+  const patterns = [
+    { type: "bold",       regex: /\*(.+?)\*/gs },
+    { type: "italic",     regex: /_(.+?)_/gs },
+    { type: "strike",     regex: /~(.+?)~/gs },
+    { type: "link",       regex: /\[([^\]]+?)\]\(([^)]+?)\)/gs },
+    { type: "color",      regex: /color:([a-zA-Z0-9#]+)\{([^}]+)\}/gs },
+  ];
+
+  let tokens = [];
+  let lastIndex = 0;
+
+  // Master regex combining all the above
+  const master = new RegExp(
+    patterns.map(p => p.regex.source).join("|"),
+    "gs"
+  );
+
+  let match;
+  while ((match = master.exec(str)) !== null) {
+    // Push raw text before matched token
+    if (match.index > lastIndex) {
+      tokens.push({ type: "text", value: str.slice(lastIndex, match.index) });
     }
 
-    // Odd indexes = highlighted text
-    return (
-      <Text key={`bold-${i}`} style={{ fontWeight: 'bold' }}>
-        {part}
-      </Text>
-    );
+    const [
+      full,
+      boldText,
+      italicText,
+      strikeText,
+      linkText,
+      linkHref,
+      colorValue,
+      colorText,
+    ] = match;
+
+    if (boldText !== undefined) {
+      tokens.push({ type: "bold", value: boldText });
+    } else if (italicText !== undefined) {
+      tokens.push({ type: "italic", value: italicText });
+    } else if (strikeText !== undefined) {
+      tokens.push({ type: "strike", value: strikeText });
+    } else if (linkText !== undefined) {
+      tokens.push({ type: "link", text: linkText, href: linkHref });
+    } else if (colorValue !== undefined) {
+      tokens.push({ type: "color", value: colorText, color: colorValue });
+    }
+
+    lastIndex = master.lastIndex;
+  }
+
+  // remaining text
+  if (lastIndex < str.length) {
+    tokens.push({ type: "text", value: str.slice(lastIndex) });
+  }
+
+  return tokens;
+}
+
+/* ------------------------------------------
+   2) RENDERER: converts tokens → <Text/>
+------------------------------------------- */
+
+function renderTokens(tokens) {
+  return tokens.map((token, i) => {
+    switch (token.type) {
+      case "text":
+        return <Text key={`t-${i}`}>{token.value}</Text>;
+
+      case "bold":
+        return (
+          <Text key={`b-${i}`} style={{ fontWeight: "bold" }}>
+            {token.value}
+          </Text>
+        );
+
+      case "italic":
+        return (
+          <Text key={`i-${i}`} style={{ fontStyle: "italic" }}>
+            {token.value}
+          </Text>
+        );
+
+      case "strike":
+        return (
+          <Text key={`s-${i}`} style={{ textDecorationLine: "line-through" }}>
+            {token.value}
+          </Text>
+        );
+
+      case "color":
+        return (
+          <Text key={`c-${i}`} style={{ color: token.color }}>
+            {token.value}
+          </Text>
+        );
+
+      case "link":
+        return (
+          <Text
+            key={`l-${i}`}
+            style={{ textDecorationLine: "underline" }}
+            onPress={() => Linking.openURL(token.href)}
+          >
+            {token.text}
+          </Text>
+        );
+
+      default:
+        return null;
+    }
   });
+}
+
+export function parseRichText(input) {
+  const tokens = tokenize(input);
+  return renderTokens(tokens);
 }
 
 export default function RichTextInput({
@@ -35,12 +136,12 @@ export default function RichTextInput({
     const selectionRef = useRef({ start: 0, end: 0 });
     const valueRef = useRef('');
 
-    const [children, setChildren] = useState(exampleText);
+    const [raw, setRaw] = useState("");
 
     useImperativeHandle(ref, () => ({
         setValue(value: string) {
             valueRef.current = value;
-            setChildren(value);
+            setRaw(value);
         },
         toggleBold() {
             console.log("Toggle bold text");
@@ -55,7 +156,13 @@ export default function RichTextInput({
     }
 
     const handleOnChangeText = (text: string) => {
-        setChildren(parseAsterisks(text));
+        valueRef.current = valueRef.current;
+
+        setRaw(text);
+        /** Know issue: after parsing symbols are removed so they are not actually saved because they where parsed.
+         * That produces that when typing again the text that was parsed has no symbols so 
+         * it is not parsed again, causing the styles to disappear.
+         * Must find a way to diff between the generated array with the new one to not remove previous styles. */
     }
 
     return (
@@ -68,7 +175,7 @@ export default function RichTextInput({
                 onSelectionChange={handleSelectionChange}
                 onChangeText={handleOnChangeText}
             >
-                {children}
+                {parseRichText(raw)}
             </TextInput>
        </View>
     );

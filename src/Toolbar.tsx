@@ -1,8 +1,15 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { RefObject } from "react";
+
+interface ToolbarProps {
+    richTextInputRef: RefObject<string, number>,
+    exampleProps: string
+}
 
 export default function Toolbar({
-    richTextInputRef
-}) {
+    richTextInputRef,
+    exampleProps
+} : ToolbarProps) {
 
     const handleBold = () => {
         richTextInputRef.current.toggleBold();
