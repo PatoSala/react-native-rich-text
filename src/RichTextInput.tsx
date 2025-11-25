@@ -1,7 +1,7 @@
 import { useState, useImperativeHandle, useRef } from "react";
 import { TextInput, Text, StyleSheet, View, Linking } from "react-native";
 
-const exampleText = "Hello *bold* *italic* lineThrough *underline* world!";
+const exampleText = "Hello *bold* _italic_ lineThrough *underline* world!";
 
 const StylesMap = {
     bold: (children) => <Text style={styles.bold}>{children}</Text>,
@@ -163,6 +163,11 @@ export default function RichTextInput({
          * That produces that when typing again the text that was parsed has no symbols so 
          * it is not parsed again, causing the styles to disappear.
          * Must find a way to diff between the generated array with the new one to not remove previous styles. */
+        
+        /** Maybe a fix could be to loop over the TextInput content since it's already parsed
+         * and generate a rich text string with the corresponding symbols in the place of the text views.
+         */
+        console.log(parseRichText(text));
     }
 
     return (
