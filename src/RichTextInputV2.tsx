@@ -13,11 +13,23 @@ interface Diff {
     removed: string;
     added: string;
 }
+                        
+const PATTERNS = [
+  { marker: "*", style: "bold" },
+  { marker: "_", style: "italic" },
+  { marker: "~", style: "strike" },
+];
 
 function insertAt(str, index, substring) {
   // Clamp index into valid boundaries
   const i = Math.max(0, Math.min(index, str.length));
   return str.slice(0, i) + substring + str.slice(i);
+}
+
+function findMatch(str, marker) {
+  const regex = new RegExp(`\\${marker}(.+?)\\${marker}`);
+  const match = regex.exec(str);
+  return match ? match[1] : null;
 }
 
 // Returns string modifications
@@ -43,56 +55,90 @@ function diffStrings(prev, next) : Diff {
   };
 }
 
-const tokenize = () => {}
-
 const updateTokens = (tokens: Token[], diff: Diff) => {
-    let untokenizedString = ""
+    let updatedTokens = [...tokens];
+    let newMatch = "";
+    let modifiedIndex = diff.start;
+    const wholeString = tokens.reduce((acc, curr) => acc + curr.text, "");
+
+    if (modifiedIndex >= wholeString.length) {
+        updatedTokens[updatedTokens.length - 1].text += diff.added;
+        return {
+            updatedTokens,
+            newMatch
+        };
+    }
+
     // First: find corresponding token
-    for (const token of tokens) {
-        untokenizedString += token.text; // Concat all prev tokens text to find updated token.
-        
-        if (diff.start <= untokenizedString.length) {
+    for (const [index, token] of tokens.entries()) {
+        console.log("MODIFIED INDEX: ", modifiedIndex);
+        // Find index to update
+        if (modifiedIndex < token.text.length) {
+            console.log("TOKEN TO UPDATE: ", token);
+            const tokenCopy = { ...token };
+
             if (diff.removed.length > 0) {
-                token.text = token.text.replace(diff.removed, "");
+                tokenCopy.text = token.text.slice(0, diff.start) + token.text.slice(diff.start + diff.removed.length, token.text.length - 1)
             }
 
             if (diff.added.length > 0) {
-                token.text = insertAt(token.text, diff.start, diff.added);
+                tokenCopy.text = insertAt(token.text, modifiedIndex, diff.added);
             }
+
+            updatedTokens[index] = tokenCopy;
+            break;
         }
+
+        modifiedIndex -= token.text.length;
     }
 
-    return tokens;
-
+    return {
+        updatedTokens,
+        newMatch
+    };
 }
 
 export default function RichTextInputV2() {
     const inputRef = useRef<TextInput>(null);
     const selectionRef = useRef({ start: 0, end: 0 });
-    const [rawText, setRawText] = useState("");
     const [tokens, setTokens] = useState([
         {
             type: "text",
-            text: ""
+            text: "Rich text input "
+        },
+        {
+            type: "bold",
+            text: "bold"
+        },
+        {
+            type: "italic",
+            text: " world!"
+        },
+        {
+            type: "text",
+            text: " "
         }
     ]);
-    console.log("TOKENS", tokens);
-    const [children, setChildren] = useState([]);
-    const prevTextRef = useRef("");
+    console.log(tokens);
+    const prevTextRef = useRef(tokens.map(t => t.text).join(""));
 
     const handleSelectionChange = ({ nativeEvent }) => {
         selectionRef.current = nativeEvent.selection;
     }
 
     const handleOnChangeText = (nextText: string) => {
+        console.log("PREV TEXT: ", prevTextRef.current);
+        console.log("NEXT TEXT: ", nextText);
         const diff = diffStrings(prevTextRef.current, nextText);
-        console.log(diff);
-
-        const updatedTokens = updateTokens(tokens, diff);
-        console.log(updatedTokens);
-        setTokens([...updatedTokens]);
-
-        prevTextRef.current = nextText;
+        console.log("DIFF", diff);
+        const { updatedTokens, newMatch} = updateTokens(tokens, diff);
+        setTokens([...updatedTokens]); 
+        
+        if (newMatch) {
+            prevTextRef.current = nextText.replace(`*${newMatch}*`, newMatch);
+        } else {
+            prevTextRef.current = nextText;
+        }
     }
 
     return (
@@ -107,7 +153,7 @@ export default function RichTextInputV2() {
             >
                 {tokens.map((token, i) => {
                     return (
-                        <Text key={i} style={{ backgroundColor: "red" }}>{token.text}</Text>
+                        <Text key={i} style={styles[token.type]}>{token.text}</Text>
                     )
                 })}
             </TextInput>
