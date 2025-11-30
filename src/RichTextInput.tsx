@@ -1,174 +1,288 @@
-import { useState, useImperativeHandle, useRef } from "react";
+import { useState, useImperativeHandle, useRef, useEffect } from "react";
 import { TextInput, Text, StyleSheet, View, Linking } from "react-native";
 
 const exampleText = "Hello *bold* _italic_ lineThrough *underline* world!";
+const exampleTokens = [
+    {
+        type: "text",
+        text: "Rich text input "
+    },
+    {
+        type: "bold",
+        text: "bold"
+    },
+    {
+        type: "italic",
+        text: " world!"
+    },
+    {
+        type: "text",
+        text: " "
+    }
+];
 
-const StylesMap = {
-    bold: (children) => <Text style={styles.bold}>{children}</Text>,
-    italic: (children) => <Text style={styles.italic}>{children}</Text>,
-    lineThrough: (children) => <Text style={styles.lineThrough}>{children}</Text>,
-    underline: (children) => <Text style={styles.underline}>{children}</Text>,
+interface Token {
+    type: string;
+    text: string;
 }
 
-function tokenize(str) {
-  const patterns = [
-    { type: "bold",       regex: /\*(.+?)\*/gs },
-    { type: "italic",     regex: /_(.+?)_/gs },
-    { type: "strike",     regex: /~(.+?)~/gs },
-    { type: "link",       regex: /\[([^\]]+?)\]\(([^)]+?)\)/gs },
-    { type: "color",      regex: /color:([a-zA-Z0-9#]+)\{([^}]+)\}/gs },
-  ];
+interface Diff {
+    start: number;
+    removed: string;
+    added: string;
+}
+                        
+const PATTERNS = [
+  { marker: "*", style: "bold" },
+  { marker: "_", style: "italic" },
+  { marker: "~", style: "strike" },
+];
 
-  let tokens = [];
-  let lastIndex = 0;
+function insertAt(str, index, substring) {
+  // Clamp index into valid boundaries
+  const i = Math.max(0, Math.min(index, str.length));
+  return str.slice(0, i) + substring + str.slice(i);
+}
 
-  // Master regex combining all the above
-  const master = new RegExp(
-    patterns.map(p => p.regex.source).join("|"),
-    "gs"
-  );
+function removeSubstringAcrossTokens(tokens, removeStart, removeEnd) {
+  let startToken = null;
+  let startLocal = null;
 
-  let match;
-  while ((match = master.exec(str)) !== null) {
-    // Push raw text before matched token
-    if (match.index > lastIndex) {
-      tokens.push({ type: "text", value: str.slice(lastIndex, match.index) });
+  let endToken = null;
+  let endLocal = null;
+
+  let index = 0;
+
+  // Find start and end positions
+  for (let t = 0; t < tokens.length; t++) {
+    const tokenLength = tokens[t].length;
+
+    // Start inside this token?
+    if (startToken === null && removeStart < index + tokenLength) {
+      startToken = t;
+      startLocal = removeStart - index;
     }
 
-    const [
-      full,
-      boldText,
-      italicText,
-      strikeText,
-      linkText,
-      linkHref,
-      colorValue,
-      colorText,
-    ] = match;
-
-    if (boldText !== undefined) {
-      tokens.push({ type: "bold", value: boldText });
-    } else if (italicText !== undefined) {
-      tokens.push({ type: "italic", value: italicText });
-    } else if (strikeText !== undefined) {
-      tokens.push({ type: "strike", value: strikeText });
-    } else if (linkText !== undefined) {
-      tokens.push({ type: "link", text: linkText, href: linkHref });
-    } else if (colorValue !== undefined) {
-      tokens.push({ type: "color", value: colorText, color: colorValue });
+    // End inside this token?
+    if (endToken === null && removeEnd < index + tokenLength) {
+      endToken = t;
+      endLocal = removeEnd - index;
     }
 
-    lastIndex = master.lastIndex;
+    index += tokenLength;
   }
 
-  // remaining text
-  if (lastIndex < str.length) {
-    tokens.push({ type: "text", value: str.slice(lastIndex) });
+  // Case A: start and end in same token
+  if (startToken === endToken) {
+    tokens[startToken] =
+      tokens[startToken].slice(0, startLocal) +
+      tokens[startToken].slice(endLocal);
+    return tokens;
   }
+
+  // Case B: spans multiple tokens
+  // Trim start token
+  tokens[startToken] = tokens[startToken].slice(0, startLocal);
+
+  // Trim end token
+  tokens[endToken] = tokens[endToken].slice(endLocal);
+
+  // Remove middle tokens
+  tokens.splice(startToken + 1, endToken - startToken - 1);
 
   return tokens;
 }
 
-/* ------------------------------------------
-   2) RENDERER: converts tokens → <Text/>
-------------------------------------------- */
 
-function renderTokens(tokens) {
-  return tokens.map((token, i) => {
-    switch (token.type) {
-      case "text":
-        return <Text key={`t-${i}`}>{token.value}</Text>;
+function removeAt(str, index, strToRemove) {
+  return str.slice(0, index) + str.slice(index + strToRemove.length);
+}
 
-      case "bold":
-        return (
-          <Text key={`b-${i}`} style={{ fontWeight: "bold" }}>
-            {token.value}
-          </Text>
-        );
+function findMatch(str, marker) {
+  const regex = new RegExp(`\\${marker}(.+?)\\${marker}`);
+  const match = regex.exec(str);
+  return match ? match[1] : null;
+}
 
-      case "italic":
-        return (
-          <Text key={`i-${i}`} style={{ fontStyle: "italic" }}>
-            {token.value}
-          </Text>
-        );
+// Returns string modifications
+function diffStrings(prev, next) : Diff {
+  let start = 0;
 
-      case "strike":
-        return (
-          <Text key={`s-${i}`} style={{ textDecorationLine: "line-through" }}>
-            {token.value}
-          </Text>
-        );
+  while (start < prev.length && start < next.length && prev[start] === next[start]) {
+    start++;
+  }
 
-      case "color":
-        return (
-          <Text key={`c-${i}`} style={{ color: token.color }}>
-            {token.value}
-          </Text>
-        );
+  let endPrev = prev.length - 1;
+  let endNext = next.length - 1;
 
-      case "link":
-        return (
-          <Text
-            key={`l-${i}`}
-            style={{ textDecorationLine: "underline" }}
-            onPress={() => Linking.openURL(token.href)}
-          >
-            {token.text}
-          </Text>
-        );
+  while (endPrev >= start && endNext >= start && prev[endPrev] === next[endNext]) {
+    endPrev--;
+    endNext--;
+  }
 
-      default:
-        return null;
+  return {
+    start,
+    removed: prev.slice(start, endPrev + 1),
+    added: next.slice(start, endNext + 1),
+  };
+}
+
+// Parses rich text into tokens
+const parseTokens = (text: string) => {
+    const tokens = [];
+}
+// Updates token content (add, remove, replace)
+// Note: need to support cross-token updates.
+const updateTokens = (tokens: Token[], diff: Diff) => {
+    let updatedTokens = [...tokens];
+    let modifiedIndex = diff.start;
+    const wholeString = tokens.reduce((acc, curr) => acc + curr.text, "");
+
+    // If we're at the end of the string
+    if (modifiedIndex >= wholeString.length) {
+        if (diff.added.length > 0) {
+            updatedTokens[updatedTokens.length - 1].text += diff.added;
+            return {
+                updatedTokens,
+                plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+            };
+        }
+
+        if (diff.removed.length > 0) {
+            const lastTokenIndex = updatedTokens.length - 1;
+            updatedTokens[lastTokenIndex].text = updatedTokens[lastTokenIndex].text.slice(0, updatedTokens[lastTokenIndex].text.length - diff.removed.length);
+            return {
+                updatedTokens,
+                plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+            };
+        }
     }
-  });
+
+    // First: find corresponding token
+    for (const [index, token] of tokens.entries()) {
+        // Find index to update
+        if (modifiedIndex < token.text.length) {
+            const tokenCopy = { ...token };
+
+            // Handle case where both add and remove are present?
+
+            // Remove if theres something to remove
+            if (diff.removed.length > 0) {
+                tokenCopy.text = removeAt(token.text, modifiedIndex, diff.removed);
+            }
+
+            // Add if theres something to add
+            if (diff.added.length > 0) {
+                tokenCopy.text = insertAt(token.text, modifiedIndex, diff.added);
+            }
+
+            // If token is now empty, remove it
+            if (tokenCopy.text.length === 0) {
+                updatedTokens.splice(index, 1);
+                break;
+            }
+
+
+            updatedTokens[index] = tokenCopy;
+            break;
+        }
+
+        modifiedIndex -= token.text.length;
+    }
+
+    return {
+        updatedTokens,
+        // Plain text must be updated to prevent bad diffs
+        plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+    };
 }
 
-export function parseRichText(input) {
-  const tokens = tokenize(input);
-  return renderTokens(tokens);
+const splitTokens = (tokens, start, end, type ) => {
+    let updatedTokens = [...tokens];
+
+    // Find token where start
+    let startIndex = start;
+    let startToken;
+
+    for (const [index, token] of updatedTokens.entries()) {
+        if (startIndex < token.text.length) {
+            startToken = token;
+            break;
+        }
+        startIndex -= token.text.length;
+    }
+    // Find token where end
+    let endIndex = end;
+    let endToken;
+    for (const [index, token] of updatedTokens.entries()) {
+        if (endIndex < token.text.length) {
+            endToken = token;
+            break;
+        }
+        endIndex -= token.text.length;
+    }
+    // If same token, split
+    if (updatedTokens.indexOf(startToken) === updatedTokens.indexOf(endToken)) {
+        let firstToken = {
+            type: startToken.type,
+            text: startToken.text.slice(0, startIndex),
+        }
+
+        let middleToken = {
+            type: type,
+            text: startToken.text.slice(startIndex, endIndex),
+        }
+
+        let lastToken = {
+            type: startToken.type,
+            text: startToken.text.slice(endIndex, startToken.text.length),
+        }
+
+        updatedTokens.splice(updatedTokens.indexOf(startToken), 1, firstToken, middleToken, lastToken);
+    }
+
+    return {
+        result: updatedTokens
+    }
 }
 
-export default function RichTextInput({
-    ref
-}) {
+export default function RichTextInput({ ref }) {
     const inputRef = useRef<TextInput>(null);
     const selectionRef = useRef({ start: 0, end: 0 });
-    const valueRef = useRef('');
+    const [tokens, setTokens] = useState(exampleTokens);
 
-    const [raw, setRaw] = useState("");
-
-    useImperativeHandle(ref, () => ({
-        setValue(value: string) {
-            valueRef.current = value;
-            setRaw(value);
-        },
-        toggleBold() {
-            console.log("Toggle bold text");
-        },
-        toggleItalic() {
-            console.log("Toggle italic text");
-        }
-    }), []);
+    const prevTextRef = useRef(tokens.map(t => t.text).join(""));
 
     const handleSelectionChange = ({ nativeEvent }) => {
         selectionRef.current = nativeEvent.selection;
     }
 
-    const handleOnChangeText = (text: string) => {
-        valueRef.current = valueRef.current;
-
-        setRaw(text);
-        /** Know issue: after parsing symbols are removed so they are not actually saved because they where parsed.
-         * That produces that when typing again the text that was parsed has no symbols so 
-         * it is not parsed again, causing the styles to disappear.
-         * Must find a way to diff between the generated array with the new one to not remove previous styles. */
+    const handleOnChangeText = (nextText: string) => {
+        const diff = diffStrings(prevTextRef.current, nextText);
+        const { updatedTokens, plain_text} = updateTokens(tokens, diff);
         
-        /** Maybe a fix could be to loop over the TextInput content since it's already parsed
-         * and generate a rich text string with the corresponding symbols in the place of the text views.
-         */
-        console.log(parseRichText(text));
+        setTokens([...updatedTokens]); 
+        
+        prevTextRef.current = plain_text;
     }
+
+    useImperativeHandle(ref, () => ({
+        toggleBold() {
+            const { start, end } = selectionRef.current;
+            const { result } = splitTokens(tokens, start, end, "bold");
+            console.log(result);
+            setTokens([...result]);
+            inputRef.current.setSelection(end, end);
+        },
+        toggleItalic() {
+            const { start, end } = selectionRef.current;
+            const { result } = splitTokens(tokens, start, end, "italic");
+            console.log(result);
+            setTokens([...result]);
+            inputRef.current.setSelection(end, end);
+
+        }
+    }))
 
     return (
        <View style={{ position: "relative" }}>
@@ -180,7 +294,11 @@ export default function RichTextInput({
                 onSelectionChange={handleSelectionChange}
                 onChangeText={handleOnChangeText}
             >
-                {parseRichText(raw)}
+                {tokens.map((token, i) => {
+                    return (
+                        <Text key={i} style={styles[token.type]}>{token.text}</Text>
+                    )
+                })}
             </TextInput>
        </View>
     );
@@ -191,6 +309,9 @@ const styles = StyleSheet.create({
         fontSize: 20,
         width: "100%",
         paddingHorizontal: 16
+    },
+    text: {
+        color: "black"
     },
     bold: {
         fontWeight: 'bold',

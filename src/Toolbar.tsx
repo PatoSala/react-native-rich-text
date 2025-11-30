@@ -1,14 +1,18 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { RefObject } from "react";
+import { RefObject, Ref } from "react";
+
+interface RichTextInput {
+    toggleBold: () => void;
+    toggleItalic: () => void;
+    setValue: (value: string) => void;
+}
 
 interface ToolbarProps {
-    richTextInputRef: RefObject<string, number>,
-    exampleProps: string
+    richTextInputRef: Ref<RichTextInput>,
 }
 
 export default function Toolbar({
-    richTextInputRef,
-    exampleProps
+    richTextInputRef
 } : ToolbarProps) {
 
     const handleBold = () => {
@@ -19,10 +23,6 @@ export default function Toolbar({
         richTextInputRef.current.toggleItalic();
     }
 
-    const handleClear = () => {
-        richTextInputRef.current.setValue('');
-    }
-
     return (
         <View style={styles.toolbar}>
             <TouchableOpacity style={styles.toolbarButton} onPress={handleBold}>
@@ -31,10 +31,6 @@ export default function Toolbar({
 
             <TouchableOpacity style={styles.toolbarButton} onPress={handleItalic}>
                 <Text>Italic</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolbarButton} onPress={handleClear}>
-                <Text>Clear</Text>
             </TouchableOpacity>
         </View>
     );
