@@ -261,6 +261,19 @@ const splitTokens = (tokens, start, end, type ) => {
 
     // If same token, split
     if (startTokenIndex === endTokenIndex) {
+
+        /* 
+            Selection:      |---------|
+            Tokens:     ["Rich text input "] ["bold"] ["world!"] [" "]
+
+            Selection is within a token. We need to split that token to apply annotations:
+
+            First token: ["Ri"]
+            Middle token: ["ch text inp"] --> Annotations are applied here.
+            Last token: ["ut "]
+
+            Result: ["Ri"] ["ch text inp"] ["ut "] ["bold"] ["world!"] [" "]
+        */
         
         let firstToken = {
             text: startToken.text.slice(0, startIndex),
@@ -287,6 +300,13 @@ const splitTokens = (tokens, start, end, type ) => {
             }
         }
 
+        // Note: the following conditionals are to prevent empty tokens.
+        // It would be ideal if instead of catching empty tokens we could write the correct insert logic to prevent them.
+        if (firstToken.text.length === 0 && lastToken.text.length === 0) {
+            updatedTokens.splice(startTokenIndex, 1, middleToken);
+            return { result: updatedTokens };
+        }
+
         if (firstToken.text.length === 0) {
             updatedTokens.splice(startTokenIndex, 1, middleToken, lastToken);
             return { result: updatedTokens };
@@ -296,11 +316,6 @@ const splitTokens = (tokens, start, end, type ) => {
             updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken);
             return { result: updatedTokens };
         }
-
-        if (firstToken.text.length === 0 && lastToken.text.length === 0) {
-            updatedTokens.splice(startTokenIndex, 1, middleToken);
-            return { result: updatedTokens };
-        }
         
         updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken, lastToken);
         return { result: updatedTokens };
@@ -308,7 +323,6 @@ const splitTokens = (tokens, start, end, type ) => {
 
     // Cross-token selection
     if (startTokenIndex !== endTokenIndex) {
-        console.log("Cross-token selection");
         // Before splitting, check if all selected tokens already have the annotation
         const selectedTokens = updatedTokens.slice(startTokenIndex, endTokenIndex + 1);
         const allSelectedTokensHaveAnnotation = selectedTokens.every((token) => token.annotations[type] === true);
@@ -358,12 +372,29 @@ const splitTokens = (tokens, start, end, type ) => {
             }
         }
 
+        // Catch empty tokens. Empty tokens are always at the extremes.
+        if (firstToken.text.length === 0 && lastToken.text.length === 0) {
+            updatedTokens = updatedTokens.slice(0, startTokenIndex).concat([secondToken, ...updatedMiddleTokens, secondToLastToken]).concat(updatedTokens.slice(endTokenIndex + 1));
+            return { result: updatedTokens };
+        }
+
+        if (firstToken.text.length === 0) {
+            updatedTokens = updatedTokens.slice(0, startTokenIndex).concat([secondToken, ...updatedMiddleTokens, secondToLastToken, lastToken]).concat(updatedTokens.slice(endTokenIndex + 1));
+            return { result: updatedTokens };
+        }
+
+        if (lastToken.text.length === 0) {
+            updatedTokens = updatedTokens.slice(0, startTokenIndex).concat([firstToken, secondToken, ...updatedMiddleTokens, secondToLastToken]).concat(updatedTokens.slice(endTokenIndex + 1));
+            return { result: updatedTokens };
+        }
+
         updatedTokens = updatedTokens.slice(0, startTokenIndex).concat([firstToken, secondToken, ...updatedMiddleTokens, secondToLastToken, lastToken]).concat(updatedTokens.slice(endTokenIndex + 1));
+        return { result: updatedTokens };
     }
 
-    return {
+    /* return {
         result: [...updatedTokens],
-    }
+    } */
 }
 
 export default function RichTextInput({ ref }) {

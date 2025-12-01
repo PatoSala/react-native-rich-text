@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Keyboard } from "react-native";
 import { RefObject, Ref } from "react";
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 interface RichTextInput {
     toggleBold: () => void;
@@ -35,26 +36,34 @@ export default function Toolbar({
         richTextInputRef.current.toggleComment();
     }
 
+    const handleKeyboardDismiss = () => {
+        Keyboard.dismiss();
+    }
+
     return (
         <View style={styles.toolbar}>
             <TouchableOpacity style={styles.toolbarButton} onPress={handleBold}>
-                <Text>Bold</Text>
+                <FontAwesome6 name="bold" size={16} color="black" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.toolbarButton} onPress={handleItalic}>
-                <Text>Italic</Text>
+                <FontAwesome6 name="italic" size={16} color="black" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.toolbarButton} onPress={handleLineThrough}>
-                <Text>Line Through</Text>
+                <FontAwesome6 name="strikethrough" size={16} color="black" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.toolbarButton} onPress={handleUnderline}>
-                <Text>Underline</Text>
+                <FontAwesome6 name="underline" size={16} color="black" />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.toolbarButton} onPress={handleComment}>
-                <Text>Comment</Text>
+                <FontAwesome6 name="comment-alt" size={16} color="black" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.toolbarButton} onPress={handleKeyboardDismiss}>
+                <FontAwesome6 name="keyboard" size={16} color="black" />
             </TouchableOpacity>
         </View>
     );
@@ -72,6 +81,7 @@ const styles = StyleSheet.create({
     },
     toolbarButton: {
         height: 50,
+        width: 50,
         display: "flex",
         justifyContent: "center",
         alignItems: "center"
