@@ -430,7 +430,6 @@ export default function RichTextInput({ ref }) {
             const { result } = splitTokens(tokens, start, end, "italic");
             setTokens([...result]);
             inputRef.current.setSelection(end, end);
-
         },
         toggleLineThrough() {
             const { start, end } = selectionRef.current;
@@ -449,6 +448,10 @@ export default function RichTextInput({ ref }) {
             const { result } = splitTokens(tokens, start, end, "comment");
             setTokens([...result]);
             inputRef.current.setSelection(end, end);
+        },
+        setValue(value: string) {
+            // To keep styles, parsing should be done before setting value
+            
         }
     }))
 
