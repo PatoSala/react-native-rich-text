@@ -250,7 +250,7 @@ const splitTokens = (tokens, start, end, type ) => {
     let startIndex = start;
     let startToken;
 
-    for (const [index, token] of updatedTokens.entries()) {
+    for (const token of updatedTokens) {
         if (startIndex < token.text.length) {
             startToken = token;
             break;
@@ -260,7 +260,7 @@ const splitTokens = (tokens, start, end, type ) => {
     // Find token where end
     let endIndex = end;
     let endToken;
-    for (const [index, token] of updatedTokens.entries()) {
+    for (const token of updatedTokens) {
         // The - 1 is necessary
         if (endIndex - 1 < token.text.length) {
             endToken = token;
@@ -329,8 +329,8 @@ const splitTokens = (tokens, start, end, type ) => {
             updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken);
             return { result: updatedTokens };
         }
-        
-        updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken, lastToken);
+
+        updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken, lastToken)
         return { result: updatedTokens };
     }
 
@@ -406,7 +406,33 @@ const splitTokens = (tokens, start, end, type ) => {
     }
 }
 
+// Concats tokens containing similar annotations
+const concatTokens = (tokens: Token[]) => {
+    let concatenedTokens = [];
 
+    for (const [index, token] of tokens.entries()) {
+        if (index === 0) {
+            concatenedTokens.push(token);
+            continue;
+        }
+
+        const prevToken = concatenedTokens[concatenedTokens.length - 1];
+
+        if (prevToken.annotations.bold === token.annotations.bold &&
+            prevToken.annotations.italic === token.annotations.italic &&
+            prevToken.annotations.lineThrough === token.annotations.lineThrough &&
+            prevToken.annotations.underline === token.annotations.underline &&
+            prevToken.annotations.comment === token.annotations.comment &&
+            prevToken.annotations.color === token.annotations.color) {
+            prevToken.text += token.text;
+            continue;
+        }
+
+        concatenedTokens.push(token);
+    }
+
+    return concatenedTokens;
+}
 
 export default function RichTextInput({ ref }) {
     const inputRef = useRef<TextInput>(null);
@@ -422,7 +448,7 @@ export default function RichTextInput({ ref }) {
             comment: false
         }
     }]);
-
+    console.log(tokens);
     const prevTextRef = useRef(tokens.map(t => t.text).join(""));
 
     const [toSplit, setToSplit] = useState({
@@ -468,7 +494,7 @@ export default function RichTextInput({ ref }) {
             }
 
             const { result } = splitTokens(tokens, start, end, "bold");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleItalic() {
@@ -485,7 +511,7 @@ export default function RichTextInput({ ref }) {
             }
 
             const { result } = splitTokens(tokens, start, end, "italic");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleLineThrough() {
@@ -502,7 +528,7 @@ export default function RichTextInput({ ref }) {
             }
 
             const { result } = splitTokens(tokens, start, end, "lineThrough");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleUnderline() {
@@ -519,7 +545,7 @@ export default function RichTextInput({ ref }) {
             }
 
             const { result } = splitTokens(tokens, start, end, "underline");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleComment() {
@@ -536,7 +562,7 @@ export default function RichTextInput({ ref }) {
             }
 
             const { result } = splitTokens(tokens, start, end, "comment");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         setValue(value: string) {
