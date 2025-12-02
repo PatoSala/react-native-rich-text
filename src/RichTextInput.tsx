@@ -32,16 +32,6 @@ const exampleTokens = [
             underline: false,
             color: "black"
         }
-    },
-    {
-        text: " ",
-        annotations: {
-            bold: false,
-            italic: false,
-            lineThrough: false,
-            underline: false,
-            color: "black"
-        }
     }
 ];
 
@@ -71,17 +61,18 @@ const PATTERNS = [
 function insertAt(str, index, substring) {
   // Clamp index into valid boundaries
   const i = Math.max(0, Math.min(index, str.length));
+  console.log(i);
   return str.slice(0, i) + substring + str.slice(i);
+}
+
+function removeAt(str, index, strToRemove) {
+  return str.slice(0, index) + str.slice(index + strToRemove.length);
 }
 
 function replaceAt(str, index, substring, length) {
   // Clamp index into valid boundaries
   const i = Math.max(0, Math.min(index, str.length));
   return str.slice(0, i) + substring + str.slice(i + length);
-}
-
-function removeAt(str, index, strToRemove) {
-  return str.slice(0, index) + str.slice(index + strToRemove.length);
 }
 
 function findMatch(str, marker) {
@@ -143,33 +134,43 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
 
     // First: find corresponding token
     for (const [index, token] of tokens.entries()) {
-        // Find index to update
-        if (modifiedIndex < token.text.length) {
+
+        // It removing a character we need to check if character index is less than token length
+       if (modifiedIndex < token.text.length && diff.removed.length > 0) {
             const tokenCopy = { ...token };
 
-            // Handle case where both add and remove are present?
-            if (diff.removed.length > 0 && diff.added.length > 0) {
-                tokenCopy.text = replaceAt(token.text, modifiedIndex, diff.added, diff.removed.length);
-                updatedTokens[index] = tokenCopy;
+           tokenCopy.text = removeAt(token.text, modifiedIndex, diff.removed);
+
+           if (tokenCopy.text.length === 0) {
+                updatedTokens.splice(index, 1);
                 break;
             }
 
-            // Remove if theres something to remove
-            if (diff.removed.length > 0) {
-                tokenCopy.text = removeAt(token.text, modifiedIndex, diff.removed);
-            }
+            updatedTokens[index] = tokenCopy;
+            break;
+       }
+
+        /**
+         * When adding a character we check if char index is less or equal to token length
+         * to handle situations where the last char of a token is removed.
+         * Example:
+         * Char index in token: 4
+         * Token text's length: 4
+         */
+        if (modifiedIndex <= token.text.length && diff.removed.length === 0) {
+            const tokenCopy = { ...token };
+
+            // Handle case where both add and remove are present?
+            /* if (diff.removed.length > 0 && diff.added.length > 0) {
+                tokenCopy.text = replaceAt(token.text, modifiedIndex, diff.added, diff.removed.length);
+                updatedTokens[index] = tokenCopy;
+                break;
+            } */
 
             // Add if theres something to add
             if (diff.added.length > 0) {
                 tokenCopy.text = insertAt(token.text, modifiedIndex, diff.added);
             }
-
-            // If token is now empty, remove it
-            if (tokenCopy.text.length === 0) {
-                updatedTokens.splice(index, 1);
-                break;
-            }
-
 
             updatedTokens[index] = tokenCopy;
             break;
@@ -391,10 +392,6 @@ const splitTokens = (tokens, start, end, type ) => {
         updatedTokens = updatedTokens.slice(0, startTokenIndex).concat([firstToken, secondToken, ...updatedMiddleTokens, secondToLastToken, lastToken]).concat(updatedTokens.slice(endTokenIndex + 1));
         return { result: updatedTokens };
     }
-
-    /* return {
-        result: [...updatedTokens],
-    } */
 }
 
 export default function RichTextInput({ ref }) {
@@ -451,7 +448,7 @@ export default function RichTextInput({ ref }) {
         },
         setValue(value: string) {
             // To keep styles, parsing should be done before setting value
-            
+
         }
     }))
 

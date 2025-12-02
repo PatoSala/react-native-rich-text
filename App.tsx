@@ -14,7 +14,7 @@ export default function App() {
     <View style={styles.container}>
       <RichTextInput ref={richTextInputRef}/>
       <Toolbar richTextInputRef={richTextInputRef} />
-      <TextInput
+      {/* <TextInput
         value={value}
         onChangeText={setValue}
         style={{
@@ -27,7 +27,7 @@ export default function App() {
       <Button
         title="Set value"
         onPress={() => richTextInputRef.current.setValue(value)}
-      />
+      /> */}
       <StatusBar style="auto" />
     </View>
   );
