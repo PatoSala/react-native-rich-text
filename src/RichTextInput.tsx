@@ -104,6 +104,91 @@ function diffStrings(prev, next) : Diff {
   };
 }
 
+function insertToken(tokens, index, type, text="" ) {
+    let modifiedIndex = index;
+    const updatedTokens = [...tokens];
+
+    let startIndex = index;
+    let startToken;
+
+    for (const [index, token] of updatedTokens.entries()) {
+        if (startIndex < token.text.length) {
+            startToken = token;
+            break;
+        }
+        startIndex -= token.text.length;
+    }
+    /* // Find token where end
+    let endIndex = index;
+    let endToken;
+    for (const [index, token] of updatedTokens.entries()) {
+        // The - 1 is necessary
+        if (endIndex - 1 < token.text.length) {
+            endToken = token;
+            break;
+        }
+        endIndex -= token.text.length;
+    } */
+
+    const startTokenIndex = updatedTokens.indexOf(startToken);
+
+    let firstToken = {
+        text: startToken.text.slice(0, startIndex),
+        annotations: {
+            ...startToken.annotations,
+            [type]: startToken.annotations[type]
+        }
+    }
+
+    // Middle token is the selected text
+    let middleToken = {
+        text: text,
+        annotations: {
+            ...startToken.annotations,
+            [type]: !startToken.annotations[type]
+        }
+    }
+
+    let lastToken = {
+        text: startToken.text.slice(startIndex , startToken.text.length),
+        annotations: {
+            ...startToken.annotations,
+            [type]: startToken.annotations[type]
+        }
+    }
+
+    // Note: the following conditionals are to prevent empty tokens.
+        // It would be ideal if instead of catching empty tokens we could write the correct insert logic to prevent them.
+        if (firstToken.text.length === 0 && lastToken.text.length === 0) {
+            updatedTokens.splice(startTokenIndex, 1, middleToken);
+            return { result: updatedTokens };
+        }
+
+        if (firstToken.text.length === 0) {
+            updatedTokens.splice(startTokenIndex, 1, middleToken, lastToken);
+            return { result: updatedTokens };
+        }
+
+        if (lastToken.text.length === 0) {
+            updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken);
+            return { result: updatedTokens };
+        }
+        
+        updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken, lastToken);
+        return {
+            result: updatedTokens,
+            children: updatedTokens.map((token, i) => {
+                return (
+                    <Text key={i} style={[
+                        styles.text,
+                        ...Object.entries(token.annotations).map(([key, value]) => value ? styles[key] : null),
+                        token.annotations.underline && token.annotations.lineThrough ? styles.underlineLineThrough : null
+                    ]}>{token.text}</Text>
+                )
+            })
+        };
+}
+
 // Updates token content (add, remove, replace)
 // Note: need to support cross-token updates.
 // It's actually updating just the text of tokens
@@ -196,7 +281,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
 }
 
 // Updates annotations and splits tokens if necessary
-const splitTokens = (tokens, start, end, type ) => {
+const splitTokens = (tokens, start, end, type, text="" ) => {
     let updatedTokens = [...tokens];
     let plain_text = tokens.reduce((acc, curr) => acc + curr.text, "");
 
@@ -237,37 +322,6 @@ const splitTokens = (tokens, start, end, type ) => {
 
     const startTokenIndex = updatedTokens.indexOf(startToken);
     const endTokenIndex = updatedTokens.indexOf(endToken);
-
-    // Not working
-    if (start === end) {
-        let firstToken = {
-            text: startToken.text.slice(0, startIndex),
-            annotations: {
-                ...startToken.annotations,
-                [type]: startToken.annotations[type]
-            }
-        }
-
-        // Middle token is the selected text
-        let middleToken = {
-            text: "",
-            annotations: {
-                ...startToken.annotations,
-                [type]: !startToken.annotations[type]
-            }
-        }
-
-        let lastToken = {
-            text: startToken.text.slice(endIndex , startToken.text.length),
-            annotations: {
-                ...startToken.annotations,
-                [type]: startToken.annotations[type]
-            }
-        }
-
-        updatedTokens.splice(startTokenIndex, 1, firstToken, middleToken, lastToken);
-        return { result: updatedTokens };
-    }
 
     // If same token, split
     if (startTokenIndex === endTokenIndex) {
@@ -411,46 +465,92 @@ export default function RichTextInput({ ref }) {
 
     console.log(tokens);
 
+    const [toSplit, setToSplit] = useState({
+        start: 0,
+        end: 0,
+        type: null
+    });
+    console.log(toSplit);
     const handleSelectionChange = ({ nativeEvent }) => {
         selectionRef.current = nativeEvent.selection;
     }
 
     const handleOnChangeText = (nextText: string) => {
         const diff = diffStrings(prevTextRef.current, nextText);
+
+        if (diff.start === toSplit.start && diff.start === toSplit.end && diff.added.length > 0) {
+            const { result } = insertToken(tokens, diff.start, toSplit.type, diff.added);
+            const plain_text = result.map(t => t.text).join("");
+            setTokens([...result]);
+            setToSplit({ start: 0, end: 0, type: null });
+            prevTextRef.current = plain_text;
+            return;
+        }
+
+
         const { updatedTokens, plain_text} = updateTokens(tokens, diff);
         
         setTokens([...updatedTokens]); 
-        
         prevTextRef.current = plain_text;
     }
 
     useImperativeHandle(ref, () => ({
         toggleBold() {
             const { start, end } = selectionRef.current;
+
+            if (start === end && end < tokens.reduce((acc, curr) => acc + curr.text.length, 0)) {
+                setToSplit({ start, end, type: "bold" });
+                return;
+            }
+
             const { result } = splitTokens(tokens, start, end, "bold");
             setTokens([...result]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleItalic() {
             const { start, end } = selectionRef.current;
+
+            if (start === end && end < tokens.reduce((acc, curr) => acc + curr.text.length, 0)) {
+                setToSplit({ start, end, type: "italic" });
+                return;
+            }
+
             const { result } = splitTokens(tokens, start, end, "italic");
             setTokens([...result]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleLineThrough() {
             const { start, end } = selectionRef.current;
+
+            if (start === end && end < tokens.reduce((acc, curr) => acc + curr.text.length, 0)) {
+                setToSplit({ start, end, type: "lineThrough" });
+                return;
+            }
+
             const { result } = splitTokens(tokens, start, end, "lineThrough");
             setTokens([...result]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleUnderline() {
             const { start, end } = selectionRef.current;
+
+            if (start === end && end < tokens.reduce((acc, curr) => acc + curr.text.length, 0)) {
+                setToSplit({ start, end, type: "underline" });
+                return;
+            }
+
             const { result } = splitTokens(tokens, start, end, "underline");
             setTokens([...result]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
         },
         toggleComment() {
             const { start, end } = selectionRef.current;
+
+            if (start === end && end < tokens.reduce((acc, curr) => acc + curr.text.length, 0)) {
+                setToSplit({ start, end, type: "comment" });
+                return;
+            }
+
             const { result } = splitTokens(tokens, start, end, "comment");
             setTokens([...result]);
             requestAnimationFrame(() => inputRef.current.setSelection(start, end));
