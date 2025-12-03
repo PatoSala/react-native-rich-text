@@ -155,7 +155,6 @@ function insertToken(tokens: Token[], index: number, type: string, text = "" ) {
 // It's actually updating just the text of tokens
 const updateTokens = (tokens: Token[], diff: Diff) => {
     let updatedTokens = [...tokens];
-    let modifiedIndex = diff.start;
     const plain_text = tokens.reduce((acc, curr) => acc + curr.text, "");
 
     // If we're at the end of the string
@@ -183,7 +182,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
     let startToken;
 
     for (const token of updatedTokens) {
-        if (startIndex < token.text.length) {
+        if (startIndex <= token.text.length) {
             startToken = token;
             break;
         }
@@ -204,7 +203,9 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
     const startTokenIndex = updatedTokens.indexOf(startToken);
     const endTokenIndex = updatedTokens.indexOf(endToken);
 
+    // Same token
     if (startTokenIndex === endTokenIndex) {
+        console.log("SAME TOKEN");
         const tokenCopy = { ...startToken };
 
         if (diff.removed.length > 0 && diff.added.length > 0) {
@@ -237,9 +238,13 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
         }
     }
 
-    if (startTokenIndex !== endTokenIndex) {
-        console.log("CROSS TOKEN UPDATE");
+    console.log("DIFF", diff);
+    console.log("START TOKEN", startToken);
+    console.log("END TOKEN", endToken);
 
+    // Cross-token
+    if (startTokenIndex !== endTokenIndex) {
+        console.log("CROSS TOKEN");
         const selectedTokens = updatedTokens.slice(startTokenIndex, endTokenIndex + 1);
 
         if (diff.removed.length > 0) {
@@ -250,13 +255,44 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
             lastToken.text = lastToken.text.slice(endIndex);
             updatedTokens[startTokenIndex] = firstToken;
             updatedTokens[endTokenIndex] = lastToken;
-            updatedTokens.splice(startTokenIndex + 1, selectedTokens.length - 1);
+            
+            // If more than two tokens, whe need to remove the ones in between
+            if (selectedTokens.length > 2) {
+                updatedTokens.splice(startTokenIndex + 1, selectedTokens.length - 2);
+                return {
+                    updatedTokens,
+                    plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+                }
+            }
 
             return {
                 updatedTokens,
                 plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
             }
 
+        }
+
+        if (diff.added.length > 0) {
+            const firstToken = selectedTokens[0];
+            const lastToken = selectedTokens[selectedTokens.length - 1];
+
+            firstToken.text = insertAt(firstToken.text, startIndex, diff.added);
+            lastToken.text = lastToken.text.slice(endIndex);
+            updatedTokens[startTokenIndex] = firstToken;
+            updatedTokens[endTokenIndex] = lastToken;
+
+            if (selectedTokens.length > 2) {
+                updatedTokens.splice(startTokenIndex + 1, selectedTokens.length - 2);
+                return {
+                    updatedTokens,
+                    plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+                }
+            }
+
+            return {
+                updatedTokens,
+                plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+            }
         }
 
 
@@ -267,12 +303,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
     }
 
     // First: find corresponding token
-    for (const [index, token] of tokens.entries()) {
-
-        /**
-         * When removing a character we need to check if character index is less than token length.
-         * 
-         */
+    /* for (const [index, token] of tokens.entries()) {
        if (modifiedIndex < token.text.length && diff.removed.length > 0) {
             const tokenCopy = { ...token };
 
@@ -293,13 +324,6 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
             break;
        }
 
-        /**
-         * When adding a character we check if char index is less or equal to token length
-         * to handle situations where the last char of a token is removed.
-         * Example:
-         * Char index in token: 4
-         * Token text's length: 4
-         */
         if (modifiedIndex <= token.text.length && diff.removed.length === 0) {
             const tokenCopy = { ...token };
 
@@ -319,7 +343,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
         updatedTokens,
         // Plain text must be updated to prevent bad diffs
         plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
-    };
+    }; */
 }
 
 // Updates annotations and splits tokens if necessary
@@ -548,7 +572,7 @@ export default function RichTextInput({ ref }) {
         if (diff.start === toSplit.start && diff.start === toSplit.end && diff.added.length > 0 && toSplit.type) {
             const { result } = insertToken(tokens, diff.start, toSplit.type, diff.added);
             const plain_text = result.map(t => t.text).join("");
-            setTokens([...result]);
+            setTokens([...concatTokens(result)]);
             setToSplit({ start: 0, end: 0, type: null });
             prevTextRef.current = plain_text;
             return;
@@ -556,7 +580,7 @@ export default function RichTextInput({ ref }) {
 
         const { updatedTokens, plain_text} = updateTokens(tokens, diff);
         
-        setTokens([...updatedTokens]); 
+        setTokens([...concatTokens(updatedTokens)]); 
         prevTextRef.current = plain_text;
     }
 
