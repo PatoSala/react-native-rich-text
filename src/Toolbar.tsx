@@ -65,7 +65,7 @@ export default function Toolbar({
             <TouchableOpacity style={[styles.toolbarButton, styles.keyboardDown]} onPress={handleKeyboardDismiss}>
                 <FontAwesome6 name="keyboard" size={16} color="black" />
                 <View style={styles.keyboardArrowContainer}>
-                    <FontAwesome6 name="chevron-down" size={10} color="black"/>
+                    <FontAwesome6 name="chevron-down" size={8} color="black"/>
                 </View>
             </TouchableOpacity>
         </View>
@@ -93,10 +93,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         position: "relative",
-
     },
     keyboardArrowContainer: {
         position: "absolute",
-        bottom: 10
+        bottom: 11
     }
 });

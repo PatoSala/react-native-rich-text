@@ -194,7 +194,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
     let endToken;
     for (const token of updatedTokens) {
         // The - 1 is necessary
-        if (endIndex - 1 < token.text.length) {
+        if (endIndex - 1 <= token.text.length) {
             endToken = token;
             break;
         }
@@ -203,13 +203,11 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
 
     const startTokenIndex = updatedTokens.indexOf(startToken);
     const endTokenIndex = updatedTokens.indexOf(endToken);
-    console.log("startTokenIndex", startTokenIndex);
-    console.log("endTokenIndex", endTokenIndex);
 
     if (startTokenIndex === endTokenIndex) {
         const tokenCopy = { ...startToken };
 
-        if (/* startIndex < tokenCopy.text.length &&  */diff.removed.length > 0 && diff.added.length > 0) {
+        if (diff.removed.length > 0 && diff.added.length > 0) {
             tokenCopy.text = replaceAt(tokenCopy.text, startIndex, diff.added, diff.removed.length);
                 updatedTokens[startTokenIndex] = tokenCopy;
                 return {
@@ -219,7 +217,7 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
                 };
         }
 
-        if (/* startIndex < tokenCopy.text.length &&  */diff.removed.length > 0) {
+        if (diff.removed.length > 0) {
             tokenCopy.text = removeAt(tokenCopy.text, startIndex, diff.removed);
             updatedTokens[startTokenIndex] = tokenCopy;
             return {
@@ -228,7 +226,8 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
             };
         }
 
-        if (startIndex <= tokenCopy.text.length && diff.added.length > 0) {
+        if (diff.added.length > 0) {
+            console.log("START INDEX", startIndex);
             tokenCopy.text = insertAt(tokenCopy.text, startIndex, diff.added);
             updatedTokens[startTokenIndex] = tokenCopy;
             return {
@@ -239,7 +238,32 @@ const updateTokens = (tokens: Token[], diff: Diff) => {
     }
 
     if (startTokenIndex !== endTokenIndex) {
-        
+        console.log("CROSS TOKEN UPDATE");
+
+        const selectedTokens = updatedTokens.slice(startTokenIndex, endTokenIndex + 1);
+
+        if (diff.removed.length > 0) {
+            const firstToken = selectedTokens[0];
+            const lastToken = selectedTokens[selectedTokens.length - 1];
+
+            firstToken.text = firstToken.text.slice(0, startIndex);
+            lastToken.text = lastToken.text.slice(endIndex);
+            updatedTokens[startTokenIndex] = firstToken;
+            updatedTokens[endTokenIndex] = lastToken;
+            updatedTokens.splice(startTokenIndex + 1, selectedTokens.length - 1);
+
+            return {
+                updatedTokens,
+                plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, ""),
+            }
+
+        }
+
+
+        return {
+            updatedTokens,
+            plain_text: updatedTokens.reduce((acc, curr) => acc + curr.text, "")
+        };
     }
 
     // First: find corresponding token
@@ -331,7 +355,6 @@ const splitTokens = (tokens: Token[], start: number, end: number, type: string )
 
     // If same token, split
     if (startTokenIndex === endTokenIndex) {
-
         /* 
             Selection:      |---------|
             Tokens:     ["Rich text input "] ["bold"] ["world!"] [" "]
