@@ -11,13 +11,15 @@ It will only support text styling since it's not possible to render images insid
 
 ## Features
 
-
 - [x] Basic text formatting (*bold*, _italic_, __underline__, ~~strikethrough~~).
 - [ ] Rich text format parsing (WIP).
 - [ ] Links and mentions.
 - [ ] Custom styling.
 - [ ] Exposed event handlers (onSubmit, onChange, onBlur, onFocus, etc).
 - [ ] Custom methods and event handlers (setText, onStartMention, onStyleChange, etc)
+
+## Known limitations
+- Inline images.
 
 ## Contributing
 
@@ -47,10 +49,3 @@ npm start
 
 ## Create a pull request
 After making any changes, open a pull request. Once you submit your pull request, it will get reviewed.
-
-## Future plans
-- Custom styles support.
-- Add support for rich text inline formatting (*, ~, #, etc).
-
-## Known limitations
-- Inline images.
